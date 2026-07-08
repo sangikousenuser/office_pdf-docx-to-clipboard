@@ -1,0 +1,1 @@
+# office_pdf-docx-to-clipboard
