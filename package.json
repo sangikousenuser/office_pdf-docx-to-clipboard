@@ -1,0 +1,24 @@
+{
+  "name": "quickexport-copy-addin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform Word add-in that exports the current document as PDF and DOCX and copies both files to the OS clipboard.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --https",
+    "dev:http": "QUICKEXPORT_NO_SSL=1 vite --host 127.0.0.1",
+    "helper": "node helper/server.js",
+    "start": "concurrently \"npm run helper\" \"npm run dev\"",
+    "build": "vite build",
+    "package:release": "node scripts/package-release.js",
+    "validate": "npm run validate:manifest && npm run validate:helper",
+    "validate:manifest": "node scripts/validate-manifest.js",
+    "validate:helper": "node --check helper/server.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.1.0",
+    "concurrently": "^9.2.1",
+    "vite": "^7.0.2"
+  },
+  "devDependencies": {}
+}
