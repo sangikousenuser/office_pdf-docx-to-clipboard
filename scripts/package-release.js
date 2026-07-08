@@ -127,8 +127,12 @@ cat > "$PLIST" <<PLIST
   </array>
   <key>RunAtLoad</key>
   <true/>
-  <key>KeepAlive</key>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
   <true/>
+  <key>Nice</key>
+  <integer>10</integer>
   <key>StandardOutPath</key>
   <string>/tmp/quickexport-copy.log</string>
   <key>StandardErrorPath</key>
