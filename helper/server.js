@@ -253,7 +253,9 @@ async function serveStaticFile(req, res) {
 
   res.writeHead(200, {
     "Content-Type": contentType(filePath),
-    "Cache-Control": "no-cache"
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
   });
   createReadStream(filePath).pipe(res);
 }

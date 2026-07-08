@@ -13,11 +13,12 @@ const platformArg = process.argv.find((arg) => arg.startsWith("--platform="));
 const platform = platformArg?.split("=")[1] || (process.platform === "darwin" ? "macos" : "windows");
 const releaseDir = path.join(root, "release");
 const appName = "QuickExportCopy";
-const appDir = path.join(releaseDir, appName);
 const packageArch = process.env.QUICKEXPORT_PACKAGE_ARCH || (platform === "macos" ? "universal" : process.arch);
+const appDir = path.join(releaseDir, `${appName}-${platform}-${packageArch}-staging`);
 const runtimeNodeVersion = process.env.QUICKEXPORT_NODE_RUNTIME_VERSION || "22.23.1";
 
-await rm(releaseDir, { recursive: true, force: true });
+await mkdir(releaseDir, { recursive: true });
+await rm(appDir, { recursive: true, force: true });
 await mkdir(appDir, { recursive: true });
 
 await copyRequiredFiles(appDir);
@@ -146,8 +147,11 @@ async function packageMacos() {
   const scriptsDir = path.join(releaseDir, "pkg-scripts");
   const pkgPath = path.join(releaseDir, `${appName}-${version}-macos.pkg`);
 
-  await mkdir(installRoot, { recursive: true });
-  await cp(appDir, installRoot, { recursive: true });
+  await rm(payloadRoot, { recursive: true, force: true });
+  await rm(scriptsDir, { recursive: true, force: true });
+  await rm(pkgPath, { force: true });
+  await mkdir(path.dirname(installRoot), { recursive: true });
+  await cp(appDir, installRoot, { recursive: true, force: true });
   await mkdir(scriptsDir, { recursive: true });
   await writeFile(path.join(scriptsDir, "postinstall"), macosPostinstall(), { mode: 0o755 });
 
@@ -173,6 +177,7 @@ async function packageWindows() {
   await writeFile(path.join(appDir, "uninstall.ps1"), windowsUninstallScript());
 
   const archivePath = path.join(releaseDir, `${appName}-${version}-windows-${packageArch}.zip`);
+  await rm(archivePath, { force: true });
 
   if (process.platform === "win32") {
     await execFileAsync("powershell.exe", [
@@ -181,7 +186,7 @@ async function packageWindows() {
       `Compress-Archive -Path '${appDir}\\*' -DestinationPath '${archivePath}' -Force`
     ]);
   } else {
-    await execFileAsync("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", appDir, archivePath]);
+    await execFileAsync("ditto", ["-c", "-k", "--sequesterRsrc", appDir, archivePath]);
   }
 
   console.log(archivePath);

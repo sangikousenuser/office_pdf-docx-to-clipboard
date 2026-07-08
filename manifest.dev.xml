@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9b36d1a2-0bdb-4c2a-a8f1-3f6f0ab732e1</Id>
-  <Version>0.1.7.0</Version>
+  <Version>0.1.8.0</Version>
   <ProviderName>QuickExport</ProviderName>
   <DefaultLocale>ja-JP</DefaultLocale>
   <DisplayName DefaultValue="QuickExport &amp; Copy"/>
@@ -20,7 +20,7 @@
     <Host Name="Document"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://127.0.0.1:5173/index.html"/>
+    <SourceLocation DefaultValue="https://127.0.0.1:5173/index.html?v=0.1.8"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -65,8 +65,8 @@
         <bt:Image id="Icon.80x80" DefaultValue="https://127.0.0.1:5173/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url" DefaultValue="https://127.0.0.1:5173/commands.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://127.0.0.1:5173/index.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://127.0.0.1:5173/commands.html?v=0.1.8"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://127.0.0.1:5173/index.html?v=0.1.8"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="QuickExport.Group.Label" DefaultValue="Quick Export"/>
