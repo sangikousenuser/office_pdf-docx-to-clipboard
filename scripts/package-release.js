@@ -60,11 +60,13 @@ async function prepareNodeRuntime() {
   const runtimePlatform = platform === "windows" ? "win" : "darwin";
   const archiveExtension = platform === "windows" ? "zip" : "tar.gz";
   const runtimeName = `node-v${runtimeNodeVersion}-${runtimePlatform}-${packageArch}`;
-  const archivePath = path.join(releaseDir, `${runtimeName}.${archiveExtension}`);
+  const downloadDir = path.join(releaseDir, "node-downloads");
+  const archivePath = path.join(downloadDir, `${runtimeName}.${archiveExtension}`);
   const extractDir = path.join(releaseDir, "node-runtime");
   const extractedPath = path.join(extractDir, runtimeName);
   const url = `https://nodejs.org/dist/v${runtimeNodeVersion}/${runtimeName}.${archiveExtension}`;
 
+  await mkdir(downloadDir, { recursive: true });
   await mkdir(extractDir, { recursive: true });
   await downloadFile(url, archivePath);
 
