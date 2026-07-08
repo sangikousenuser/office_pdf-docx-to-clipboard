@@ -14,7 +14,7 @@ const platform = platformArg?.split("=")[1] || (process.platform === "darwin" ? 
 const releaseDir = path.join(root, "release");
 const appName = "QuickExportCopy";
 const appDir = path.join(releaseDir, appName);
-const packageArch = process.env.QUICKEXPORT_PACKAGE_ARCH || process.arch;
+const packageArch = process.env.QUICKEXPORT_PACKAGE_ARCH || (platform === "macos" ? "universal" : process.arch);
 const runtimeNodeVersion = process.env.QUICKEXPORT_NODE_RUNTIME_VERSION || "22.23.1";
 
 await rm(releaseDir, { recursive: true, force: true });
@@ -41,25 +41,54 @@ async function copyRequiredFiles(targetDir) {
 
 async function copyBundledRuntime(targetDir) {
   const runtimeDir = path.join(targetDir, "runtime");
-  const runtimeName = platform === "windows" ? "QuickExportCopyHelper.exe" : "QuickExportCopyHelper";
-  const runtimePath = path.join(runtimeDir, runtimeName);
-  const nodeDir = await prepareNodeRuntime();
-  const nodeBinary = platform === "windows"
-    ? path.join(nodeDir, "node.exe")
-    : path.join(nodeDir, "bin", "node");
-
   await mkdir(runtimeDir, { recursive: true });
-  await copyFile(nodeBinary, runtimePath);
 
-  if (platform !== "windows") {
-    await chmod(runtimePath, 0o755);
+  if (platform === "macos") {
+    if (packageArch === "universal") {
+      await copyMacRuntime(runtimeDir, "x64");
+      await copyMacRuntime(runtimeDir, "arm64");
+      await writeMacLauncher(runtimeDir);
+      return;
+    }
+
+    await copyMacRuntime(runtimeDir, packageArch);
+    await writeMacLauncher(runtimeDir);
+    return;
   }
+
+  const nodeDir = await prepareNodeRuntime(packageArch);
+  const runtimePath = path.join(runtimeDir, "QuickExportCopyHelper.exe");
+  await copyFile(path.join(nodeDir, "node.exe"), runtimePath);
 }
 
-async function prepareNodeRuntime() {
+async function copyMacRuntime(runtimeDir, arch) {
+  const nodeDir = await prepareNodeRuntime(arch);
+  const targetDir = path.join(runtimeDir, `darwin-${arch}`);
+  const runtimePath = path.join(targetDir, "QuickExportCopyHelper");
+
+  await mkdir(targetDir, { recursive: true });
+  await copyFile(path.join(nodeDir, "bin", "node"), runtimePath);
+  await chmod(runtimePath, 0o755);
+}
+
+async function writeMacLauncher(runtimeDir) {
+  const launcherPath = path.join(runtimeDir, "QuickExportCopyLauncher");
+  await writeFile(launcherPath, `#!/bin/sh
+set -eu
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+ARCH="$(uname -m)"
+if [ "$ARCH" = "arm64" ]; then
+  exec "$DIR/darwin-arm64/QuickExportCopyHelper" "$@"
+fi
+exec "$DIR/darwin-x64/QuickExportCopyHelper" "$@"
+`);
+  await chmod(launcherPath, 0o755);
+}
+
+async function prepareNodeRuntime(arch) {
   const runtimePlatform = platform === "windows" ? "win" : "darwin";
   const archiveExtension = platform === "windows" ? "zip" : "tar.gz";
-  const runtimeName = `node-v${runtimeNodeVersion}-${runtimePlatform}-${packageArch}`;
+  const runtimeName = `node-v${runtimeNodeVersion}-${runtimePlatform}-${arch}`;
   const downloadDir = path.join(releaseDir, "node-downloads");
   const archivePath = path.join(downloadDir, `${runtimeName}.${archiveExtension}`);
   const extractDir = path.join(releaseDir, "node-runtime");
@@ -115,7 +144,7 @@ async function packageMacos() {
   const payloadRoot = path.join(releaseDir, "pkg-root");
   const installRoot = path.join(payloadRoot, "Library", "Application Support", appName);
   const scriptsDir = path.join(releaseDir, "pkg-scripts");
-  const pkgPath = path.join(releaseDir, `${appName}-${version}-macos-${packageArch}.pkg`);
+  const pkgPath = path.join(releaseDir, `${appName}-${version}-macos.pkg`);
 
   await mkdir(installRoot, { recursive: true });
   await cp(appDir, installRoot, { recursive: true });
@@ -166,17 +195,28 @@ APP_DIR="/Library/Application Support/${appName}"
 CERT_DIR="$APP_DIR/certs"
 CONSOLE_USER="$(stat -f %Su /dev/console)"
 USER_HOME="$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | awk '{print $2}')"
-HELPER_BIN="$APP_DIR/runtime/QuickExportCopyHelper"
+HELPER_BIN="$APP_DIR/runtime/QuickExportCopyLauncher"
 
 mkdir -p "$CERT_DIR"
 chmod 755 "$HELPER_BIN"
+chmod 755 "$APP_DIR/runtime/darwin-x64/QuickExportCopyHelper" "$APP_DIR/runtime/darwin-arm64/QuickExportCopyHelper"
 
 if [ ! -f "$CERT_DIR/localhost-cert.pem" ] || [ ! -f "$CERT_DIR/localhost-key.pem" ]; then
+  CERT_CONFIG="$CERT_DIR/localhost-openssl.cnf"
+  cat > "$CERT_CONFIG" <<CERTCONFIG
+[req]
+distinguished_name=req_distinguished_name
+x509_extensions=v3_req
+prompt=no
+[req_distinguished_name]
+CN=127.0.0.1
+[v3_req]
+subjectAltName=IP:127.0.0.1,DNS:localhost
+CERTCONFIG
   /usr/bin/openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \\
     -keyout "$CERT_DIR/localhost-key.pem" \\
     -out "$CERT_DIR/localhost-cert.pem" \\
-    -subj "/CN=127.0.0.1" \\
-    -addext "subjectAltName=IP:127.0.0.1,DNS:localhost"
+    -config "$CERT_CONFIG"
 fi
 
 /usr/bin/security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CERT_DIR/localhost-cert.pem" >/dev/null 2>&1 || true
@@ -199,7 +239,7 @@ cat > "$PLIST" <<PLIST
   <string>com.quickexport.copy</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/Library/Application Support/${appName}/runtime/QuickExportCopyHelper</string>
+    <string>/Library/Application Support/${appName}/runtime/QuickExportCopyLauncher</string>
     <string>/Library/Application Support/${appName}/helper/server.js</string>
   </array>
   <key>RunAtLoad</key>

@@ -1,6 +1,6 @@
 {
   "name": "quickexport-copy-addin",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "description": "Cross-platform Word add-in that exports the current document as PDF and DOCX and copies both files to the OS clipboard.",
   "type": "module",

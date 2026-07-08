@@ -27,11 +27,6 @@ jobs:
 
   package-macos:
     name: Package macOS
-    strategy:
-      matrix:
-        package-arch:
-          - x64
-          - arm64
     runs-on: macos-latest
     needs: validate
     if: startsWith(github.ref, 'refs/tags/v')
@@ -44,11 +39,9 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run package:release -- --platform=macos
-        env:
-          QUICKEXPORT_PACKAGE_ARCH: ${{ matrix.package-arch }}
       - uses: actions/upload-artifact@v4
         with:
-          name: quickexport-copy-macos-${{ matrix.package-arch }}
+          name: quickexport-copy-macos
           path: release/*.pkg
           if-no-files-found: error
 
