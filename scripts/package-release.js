@@ -189,17 +189,42 @@ async function packageWindows() {
 
 function macosPostinstall() {
   return `#!/bin/sh
-set -eu
+set -u
 
 APP_DIR="/Library/Application Support/${appName}"
 CERT_DIR="$APP_DIR/certs"
-CONSOLE_USER="$(stat -f %Su /dev/console)"
-USER_HOME="$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | awk '{print $2}')"
+LOG_FILE="/tmp/quickexport-copy-install.log"
+CONSOLE_USER="$(stat -f %Su /dev/console 2>/dev/null || true)"
+USER_HOME=""
 HELPER_BIN="$APP_DIR/runtime/QuickExportCopyLauncher"
 
-mkdir -p "$CERT_DIR"
-chmod 755 "$HELPER_BIN"
-chmod 755 "$APP_DIR/runtime/darwin-x64/QuickExportCopyHelper" "$APP_DIR/runtime/darwin-arm64/QuickExportCopyHelper"
+log() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+run_or_log() {
+  status=0
+  "$@" >> "$LOG_FILE" 2>&1 || status=$?
+  if [ "$status" -ne 0 ]; then
+    log "command failed ($status): $*"
+  fi
+  return 0
+}
+
+log "Starting QuickExport Copy postinstall"
+
+if [ "$CONSOLE_USER" = "root" ] || [ "$CONSOLE_USER" = "loginwindow" ] || [ -z "$CONSOLE_USER" ]; then
+  log "No regular console user found; user-specific setup will be skipped. CONSOLE_USER=$CONSOLE_USER"
+else
+  USER_HOME="$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory 2>/dev/null | sed 's/^NFSHomeDirectory: //' || true)"
+  if [ -z "$USER_HOME" ] || [ ! -d "$USER_HOME" ]; then
+    log "Could not resolve a valid home directory for $CONSOLE_USER; user-specific setup will be skipped."
+  fi
+fi
+
+run_or_log mkdir -p "$CERT_DIR"
+run_or_log chmod 755 "$HELPER_BIN"
+run_or_log chmod 755 "$APP_DIR/runtime/darwin-x64/QuickExportCopyHelper" "$APP_DIR/runtime/darwin-arm64/QuickExportCopyHelper"
 
 if [ ! -f "$CERT_DIR/localhost-cert.pem" ] || [ ! -f "$CERT_DIR/localhost-key.pem" ]; then
   CERT_CONFIG="$CERT_DIR/localhost-openssl.cnf"
@@ -213,24 +238,31 @@ CN=127.0.0.1
 [v3_req]
 subjectAltName=IP:127.0.0.1,DNS:localhost
 CERTCONFIG
-  /usr/bin/openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \\
+  if ! /usr/bin/openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \\
     -keyout "$CERT_DIR/localhost-key.pem" \\
     -out "$CERT_DIR/localhost-cert.pem" \\
-    -config "$CERT_CONFIG"
+    -config "$CERT_CONFIG" >> "$LOG_FILE" 2>&1; then
+    log "OpenSSL SAN certificate generation failed; trying basic localhost certificate."
+    run_or_log /usr/bin/openssl req -x509 -newkey rsa:2048 -sha256 -days 825 -nodes \\
+      -keyout "$CERT_DIR/localhost-key.pem" \\
+      -out "$CERT_DIR/localhost-cert.pem" \\
+      -subj "/CN=127.0.0.1"
+  fi
 fi
 
-/usr/bin/security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CERT_DIR/localhost-cert.pem" >/dev/null 2>&1 || true
-chmod 644 "$CERT_DIR/localhost-cert.pem" "$CERT_DIR/localhost-key.pem"
+run_or_log /usr/bin/security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CERT_DIR/localhost-cert.pem"
+run_or_log chmod 644 "$CERT_DIR/localhost-cert.pem" "$CERT_DIR/localhost-key.pem"
 
-WEF_DIR="$USER_HOME/Library/Containers/com.microsoft.Word/Data/Documents/wef"
-mkdir -p "$WEF_DIR"
-cp "$APP_DIR/manifest.xml" "$WEF_DIR/quickexport-copy-manifest.xml"
-chown -R "$CONSOLE_USER":staff "$WEF_DIR"
+if [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ]; then
+  WEF_DIR="$USER_HOME/Library/Containers/com.microsoft.Word/Data/Documents/wef"
+  run_or_log mkdir -p "$WEF_DIR"
+  run_or_log cp "$APP_DIR/manifest.xml" "$WEF_DIR/quickexport-copy-manifest.xml"
+  run_or_log chown -R "$CONSOLE_USER":staff "$WEF_DIR"
 
-LAUNCH_AGENT_DIR="$USER_HOME/Library/LaunchAgents"
-PLIST="$LAUNCH_AGENT_DIR/com.quickexport.copy.plist"
-mkdir -p "$LAUNCH_AGENT_DIR"
-cat > "$PLIST" <<PLIST
+  LAUNCH_AGENT_DIR="$USER_HOME/Library/LaunchAgents"
+  PLIST="$LAUNCH_AGENT_DIR/com.quickexport.copy.plist"
+  run_or_log mkdir -p "$LAUNCH_AGENT_DIR"
+  cat > "$PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -258,11 +290,18 @@ cat > "$PLIST" <<PLIST
 </plist>
 PLIST
 
-chown "$CONSOLE_USER":staff "$PLIST"
-launchctl bootout "gui/$(id -u "$CONSOLE_USER")" "$PLIST" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$(id -u "$CONSOLE_USER")" "$PLIST" >/dev/null 2>&1 || true
-launchctl kickstart -k "gui/$(id -u "$CONSOLE_USER")/com.quickexport.copy" >/dev/null 2>&1 || true
+  run_or_log chown "$CONSOLE_USER":staff "$PLIST"
+  USER_ID="$(id -u "$CONSOLE_USER" 2>/dev/null || true)"
+  if [ -n "$USER_ID" ]; then
+    run_or_log launchctl bootout "gui/$USER_ID" "$PLIST"
+    run_or_log launchctl bootstrap "gui/$USER_ID" "$PLIST"
+    run_or_log launchctl kickstart -k "gui/$USER_ID/com.quickexport.copy"
+  else
+    log "Could not resolve uid for $CONSOLE_USER; LaunchAgent was written but not loaded."
+  fi
+fi
 
+log "Finished QuickExport Copy postinstall"
 exit 0
 `;
 }
