@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9b36d1a2-0bdb-4c2a-a8f1-3f6f0ab732e1</Id>
-  <Version>0.1.0.0</Version>
+  <Version>0.1.1.0</Version>
   <ProviderName>QuickExport</ProviderName>
   <DefaultLocale>ja-JP</DefaultLocale>
   <DisplayName DefaultValue="QuickExport &amp; Copy"/>
